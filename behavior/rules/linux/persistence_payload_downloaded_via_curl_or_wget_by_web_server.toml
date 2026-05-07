@@ -1,0 +1,215 @@
+[rule]
+description = """
+This rule detects when a web server downloads a payload via curl or wget. Attackers may exploit RCE or file upload
+vulnerabilities to download malicious files to web servers to gain/maintain access and to establish a command and
+control channel.
+"""
+id = "aac41cc3-fc4a-4dea-b8d6-252ded1cb3fc"
+license = "Elastic License v2"
+name = "Payload Downloaded via Curl or Wget by Web Server"
+os_list = ["linux"]
+version = "1.0.6"
+
+query = '''
+process where event.type == "start" and event.action == "exec" and process.parent.interactive == false and (
+  process.parent.name in (
+    "nginx", "apache2", "httpd", "caddy", "mongrel_rails", "uwsgi", "daphne", "httpd.worker", "flask",
+    "php-cgi", "php-fcgi", "php-cgi.cagefs", "lswsctrl", "varnishd", "uvicorn", "waitress-serve", "starman",
+    "frankenphp", "zabbix_server", "asterisk", "sw-engine-fpm"
+  ) or
+  process.parent.name like ("php-fpm*", "gunicorn*", "*.cgi", "*.fcgi") or
+  (
+    process.parent.name like "ruby*" and
+    process.parent.command_line like~ ("*puma*", "*rails*", "*passenger*") and
+    not process.command_line like "*github.com/phusion/passenger/releases/download/release*"
+  ) or
+  (process.parent.name like "python*" and process.parent.command_line like~ (
+    "*hypercorn*", "*flask*", "*uvicorn*", "*django*", "*app.py*", "*server.py*", "*wsgi.py*", "*asgi.py*"
+  )) or
+  (process.parent.name like "perl*" and process.parent.command_line like~ "*plackup*") or
+  (process.parent.name == "node" and process.parent.command_line like~ (
+    "*next start*", "*--port*", "*PORT=*", "*HOST=*", "*0.0.0.0*", "*/dist/*.js*", "*/build/*.js*", "*/server/*.js*",
+    "*/app/*.js*", "*/apps/*/*.js*", "*/index.js*", "*/main.js*", "*/srv/*", "*/opt/*", "*/var/www/*", "*n8n*"
+    ) and
+    not process.parent.args like (
+      "/opt/cursor-agent/*", "/home/*/*", "/root/*", "/opt/vscode-server/*", "/usr/lib/node_modules/openclaw/dist/index.js",
+      "/home/*/.npm-global/lib/node_modules/openclaw/dist/index.js", "openclaw-gateway"
+    )
+  ) or
+  (process.parent.name == "java" and process.parent.args like~ (
+    /* Tomcat */
+    "org.apache.catalina.startup.Bootstrap", "-Dcatalina.base=*",
+
+    /* Jetty */
+    "org.eclipse.jetty.start.Main", "-Djetty.home=*",
+
+    /* WildFly / JBoss */
+    "org.jboss.modules.Main", "-Djboss.home.dir=*",
+
+    /* WebLogic */
+    "weblogic.Server", "-Dweblogic.Name=*", "*weblogic-launcher.jar*",
+
+    /* WebSphere traditional + Liberty */
+    "com.ibm.ws.runtime.WsServer", "com.ibm.ws.kernel.boot.cmdline.Bootstrap",
+
+    /* GlassFish */
+    "com.sun.enterprise.glassfish.bootstrap.ASMain",
+
+    /* Resin */
+    "com.caucho.server.resin.Resin",
+
+    /* Spring Boot */
+    "org.springframework.boot.loader.*",
+
+    /* Quarkus */
+    "*quarkus-run.jar*", "io.quarkus.runner.GeneratedMain",
+
+    /* Micronaut */
+    "io.micronaut.runtime.Micronaut",
+
+    /* Dropwizard */
+    "io.dropwizard.cli.ServerCommand",
+
+    /* Play */
+    "play.core.server.ProdServerStart",
+
+    /* Helidon */
+    "io.helidon.microprofile.server.Main", "io.helidon.webserver*",
+
+    /* Vert.x */
+    "io.vertx.core.Launcher",
+
+    /* Keycloak */
+    "org.keycloak*",
+
+    /* Apereo CAS */
+    "org.apereo.cas*",
+
+    /* Elasticsearch */
+    "org.elasticsearch.bootstrap.Elasticsearch",
+
+    /* Atlassian / Gerrit */
+    "com.atlassian.jira.startup.Launcher", "*BitbucketServerLauncher*", "com.google.gerrit.pgm.Daemon",
+
+    /* Solr */
+    "*-Dsolr.solr.home=*"
+    )
+  )
+) and
+process.name in ("bash", "dash", "sh", "tcsh", "csh", "zsh", "ksh", "fish", "busybox") and
+process.args in ("-c", "-cl", "-lc") and
+process.command_line like ("*wget *", "*curl *") and
+(
+  process.command_line regex ".*[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}(:[0-9]{1,5})?/.*" or
+  process.command_line like ("*http*", "*ftp*")
+) and
+(
+  (
+    process.command_line regex~ """.*curl.* \-[a-zA-Z]*[oO]( .+|\-.*)?""" or
+    process.command_line like~ ("*curl* --output*", "*curl* --remote-name*")
+  ) or
+  (
+    (
+      process.command_line regex~ """.*wget.* \-[a-zA-Z]*O.*""" or
+      process.command_line like~ "*wget* --output-document*"
+    ) and
+  not process.command_line like """*--output-document "-"*"""
+  ) or
+  process.command_line like ("*|*sh*", "*|*python*", "*|*php*", "*|*perl*", "*|*ruby*", "*|*node*", "*|*lua*", "*|*busybox*") or
+  (
+    process.command_line like ("*curl *>> /*", "*curl *>>/*", "*curl *> /*", "*curl *>/*", "*wget *>> /*", "*wget *>>/*", "*wget *> /*", "*wget *>/*") and
+    not process.command_line like ("*> /dev/null*", "*>/dev/null*", "*curl*/etc/cobra/*/uploads/whatsapp/*")
+  )
+) and
+not (
+  process.command_line like (
+    "*-O /dev/null*", "*-o /dev/null*", "*wget -qcO --user-agent=*", "*curl * | python -m json.tool",
+    "*http://:8008/dacx/fileoperation*", "*http://${host}:9000/api/system/liveness*"
+  ) or
+  (process.parent.name == "ruby" and process.command_line like "*/tmp/passenger-native-support-*") or
+  (process.parent.name == "asterisk" and process.command_line like "*bapi.*.group/v2/call/outgoing*") or
+  (process.parent.name == "node" and process.command_line like "*/tmp/.claude/shell-snapshots/*") or
+  (process.parent.name == "apache2" and process.command_line like "*/var/www/html/cacti/dati/weathermap/*.jpg")
+)
+'''
+
+min_endpoint_version = "8.2.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1190"
+name = "Exploit Public-Facing Application"
+reference = "https://attack.mitre.org/techniques/T1190/"
+
+
+[threat.tactic]
+id = "TA0001"
+name = "Initial Access"
+reference = "https://attack.mitre.org/tactics/TA0001/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.004"
+name = "Unix Shell"
+reference = "https://attack.mitre.org/techniques/T1059/004/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1505"
+name = "Server Software Component"
+reference = "https://attack.mitre.org/techniques/T1505/"
+[[threat.technique.subtechnique]]
+id = "T1505.003"
+name = "Web Shell"
+reference = "https://attack.mitre.org/techniques/T1505/003/"
+
+
+
+[threat.tactic]
+id = "TA0003"
+name = "Persistence"
+reference = "https://attack.mitre.org/tactics/TA0003/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1210"
+name = "Exploitation of Remote Services"
+reference = "https://attack.mitre.org/techniques/T1210/"
+
+
+[threat.tactic]
+id = "TA0008"
+name = "Lateral Movement"
+reference = "https://attack.mitre.org/tactics/TA0008/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1071"
+name = "Application Layer Protocol"
+reference = "https://attack.mitre.org/techniques/T1071/"
+
+
+[threat.tactic]
+id = "TA0011"
+name = "Command and Control"
+reference = "https://attack.mitre.org/tactics/TA0011/"
+
+[internal]
+min_endpoint_version = "8.2.0"

@@ -1,0 +1,112 @@
+[rule]
+description = """
+Detects potential privilege escalation via SUID/SGID proxy execution on Linux systems. Attackers may exploit binaries
+with the SUID/SGID bit set to execute commands with elevated privileges. This rule identifies instances where a process
+is executed with root privileges (user ID 0 or group ID 0) while the real user or group ID is non-root, indicating
+potential misuse of SUID/SGID binaries.
+"""
+id = "86ef3949-5a1e-4e71-93a8-8e0ee90a71af"
+license = "Elastic License v2"
+name = "Potential Privilege Escalation via SUID/SGID Proxy Execution"
+os_list = ["linux"]
+reference = [
+    "https://dfir.ch/posts/today_i_learned_binfmt_misc/",
+    "https://gtfobins.github.io/#+suid",
+    "https://www.elastic.co/security-labs/primer-on-persistence-mechanisms",
+]
+version = "1.0.1"
+
+query = '''
+process where event.type == "start" and event.action == "exec" and
+startswith~(process.command_line, process.executable) and process.parent.args_count == 1 and
+(
+  (process.user.id == 0 and process.real_user.id != 0) or
+  (process.group.id == 0 and process.real_group.id != 0)
+) and
+process.args in (
+  "/bin/su", "/usr/bin/su",
+  "/bin/umount", "/usr/bin/umount",
+  "/bin/chfn", "/usr/bin/chfn",
+  "/bin/chsh", "/usr/bin/chsh",
+  "/bin/gpasswd", "/usr/bin/gpasswd",
+  "/bin/newgrp", "/usr/bin/newgrp",
+  "/usr/bin/newuidmap", "/usr/bin/newgidmap",
+  "/usr/lib/dbus-1.0/dbus-daemon-launch-helper", "/usr/libexec/dbus-daemon-launch-helper",
+  "/usr/lib/openssh/ssh-keysign", "/usr/libexec/openssh/ssh-keysign",
+  "/usr/bin/pkexec", "/usr/libexec/pkexec", "/usr/lib/polkit-1/pkexec",
+  "/usr/lib/snapd/snap-confine"
+) and
+process.args_count <= 2
+/*
+Need to exclude this in the future.
+Leaving this in now because of the current CopyFail CVE-2026-24061, but it does not detect what this rule is supposed to detect.
+and not process.name == "su" and process.args == "-"
+*/
+'''
+
+min_endpoint_version = "8.6.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+
+[threat.tactic]
+id = "TA0003"
+name = "Persistence"
+reference = "https://attack.mitre.org/tactics/TA0003/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1068"
+name = "Exploitation for Privilege Escalation"
+reference = "https://attack.mitre.org/techniques/T1068/"
+
+[[threat.technique]]
+id = "T1548"
+name = "Abuse Elevation Control Mechanism"
+reference = "https://attack.mitre.org/techniques/T1548/"
+[[threat.technique.subtechnique]]
+id = "T1548.001"
+name = "Setuid and Setgid"
+reference = "https://attack.mitre.org/techniques/T1548/001/"
+
+
+
+[threat.tactic]
+id = "TA0004"
+name = "Privilege Escalation"
+reference = "https://attack.mitre.org/tactics/TA0004/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1218"
+name = "System Binary Proxy Execution"
+reference = "https://attack.mitre.org/techniques/T1218/"
+
+[[threat.technique]]
+id = "T1548"
+name = "Abuse Elevation Control Mechanism"
+reference = "https://attack.mitre.org/techniques/T1548/"
+[[threat.technique.subtechnique]]
+id = "T1548.001"
+name = "Setuid and Setgid"
+reference = "https://attack.mitre.org/techniques/T1548/001/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "8.6.0"

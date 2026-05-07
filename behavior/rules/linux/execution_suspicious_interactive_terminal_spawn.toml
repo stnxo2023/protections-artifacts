@@ -1,0 +1,77 @@
+[rule]
+description = """
+Identifies when an interactive terminal is spawned via an interpreter parent process. This behavior indicates an
+attacker is attempting to gain a more stable connection to a host after obtaining initial access.
+"""
+id = "442f824f-a2bb-4052-83d0-4c9514d31214"
+license = "Elastic License v2"
+name = "Suspicious Interactive Terminal Spawn"
+os_list = ["linux"]
+version = "1.0.1"
+
+query = '''
+process where event.type == "start" and event.action == "exec" and (
+  (
+    process.name == "perl" and process.args like "-e*" and process.command_line like "*exec*" and
+    process.command_line like ("*\"*sh\";*", "*'*sh';*")
+  ) or
+  (
+    process.parent.name like "python*" and
+    process.name in ("bash", "dash", "ash", "sh", "tcsh", "csh", "zsh", "ksh", "fish", "mksh", "busybox") and
+    (
+      (
+        process.parent.args_count >= 3 and
+        process.parent.args like~ "*pty.spawn*" and
+        process.parent.args == "-c"
+      ) or
+      (
+        process.args in (
+          "bash", "dash", "ash", "sh", "tcsh", "csh", "zsh", "ksh", "fish", "mksh", "busybox",
+          "/bin/bash", "/bin/dash", "/bin/ash", "/bin/sh", "/bin/tcsh", "/bin/csh",
+          "/bin/zsh", "/bin/ksh", "/bin/fish", "/bin/mksh", "/bin/busybox",
+          "/usr/bin/bash", "/usr/bin/dash", "/usr/bin/ash", "/usr/bin/sh", "/usr/bin/tcsh", "/usr/bin/csh",
+          "/usr/bin/zsh", "/usr/bin/ksh", "/usr/bin/fish", "/usr/bin/mksh", "/usr/bin/busybox",
+          "/usr/local/bin/bash", "/usr/local/bin/dash", "/usr/local/bin/ash", "/usr/local/bin/sh",
+          "/usr/local/bin/tcsh", "/usr/local/bin/csh", "/usr/local/bin/zsh", "/usr/local/bin/ksh",
+          "/usr/local/bin/fish", "/usr/local/bin/mksh", "/usr/local/bin/busybox"
+        ) and
+        process.args_count == 1 and
+        process.parent.args_count == 1
+      )
+    )
+  )
+)
+'''
+
+min_endpoint_version = "7.15.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.004"
+name = "Unix Shell"
+reference = "https://attack.mitre.org/techniques/T1059/004/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+
+[internal]
+min_endpoint_version = "7.15.0"

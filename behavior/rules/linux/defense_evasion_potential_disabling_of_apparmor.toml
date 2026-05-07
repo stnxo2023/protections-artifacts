@@ -1,0 +1,59 @@
+[rule]
+description = """
+Monitors for potential attempts to disable AppArmor. AppArmor is a Linux security module that enforces fine-grained
+access control policies to restrict the actions and resources that specific applications and processes can access.
+Adversaries may disable AppArmor to avoid possible detection of their tools and activities.
+"""
+id = "5a19f19d-6f94-475e-9eba-2520685c3861"
+license = "Elastic License v2"
+name = "Potential Disabling of AppArmor"
+os_list = ["linux"]
+version = "1.0.1"
+
+query = '''
+process where event.type == "start" and event.action == "exec" and (
+  (process.name == "systemctl" and process.args in ("disable", "stop", "kill", "mask") and process.args in ("apparmor", "apparmor.service")) or
+  (process.name == "service" and process.args == "apparmor" and process.args == "stop") or
+  (process.name == "chkconfig" and process.args == "apparmor" and process.args == "off") or
+  (process.name == "update-rc.d" and process.args == "apparmor" and process.args in ("remove", "disable")) or
+  (process.name == "ln" and process.args like~ "/etc/apparmor.d/*" and process.args == "/etc/apparmor.d/disable/")
+) and
+not (
+  process.parent.executable in ("/opt/puppetlabs/puppet/bin/ruby", "/lib/systemd/systemd-sysv-install") or
+  process.parent.args like "/var/lib/dpkg/info/*.postinst" or
+  process.working_directory == "/home/ansible"
+)
+'''
+
+min_endpoint_version = "7.15.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1562"
+name = "Impair Defenses"
+reference = "https://attack.mitre.org/techniques/T1562/"
+[[threat.technique.subtechnique]]
+id = "T1562.001"
+name = "Disable or Modify Tools"
+reference = "https://attack.mitre.org/techniques/T1562/001/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "7.15.0"

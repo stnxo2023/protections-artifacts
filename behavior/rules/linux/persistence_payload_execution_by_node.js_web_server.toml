@@ -1,0 +1,184 @@
+[rule]
+description = """
+This rule detects when a Node.js web server executes a payload. Attackers may exploit RCE or file upload vulnerabilities
+to execute malicious payloads on Node.js web servers to gain/maintain access and to establish a command and control
+channel.
+"""
+id = "b982a098-f3c6-42d7-958a-86c46f06360b"
+license = "Elastic License v2"
+name = "Payload Execution by Node.js Web Server"
+os_list = ["linux"]
+version = "1.0.1"
+
+query = '''
+process where event.type == "start" and event.action == "exec" and process.parent.interactive == false and
+process.parent.name == "node" and process.parent.command_line like~ (
+  "*next start*", "*--port*", "*PORT=*", "*HOST=*", "*0.0.0.0*", "*/dist/*.js*", "*/build/*.js*", "*/server/*.js*",
+  "*/app/*.js*", "*/apps/*/*.js*", "*/index.js*", "*/main.js*", "*/srv/*", "*/opt/*", "*/var/www/*", "*n8n*"
+) and
+process.name in ("bash", "dash", "sh", "tcsh", "csh", "zsh", "ksh", "fish", "mksh", "busybox") and
+process.args in ("-c", "-cl", "-lc") and (
+  process.command_line like~ (
+
+    /* Suspicious Paths */
+    "* /tmp/* ", "* /var/tmp/* ", "* /dev/shm/*", "* /run/*", "* /var/run/*",
+
+    /* Encoding, Decoding & Piping */
+    "*|sh", "*| sh *", "*| sh ", "*|bash*", "*| bash*", "*|zsh*",  "*| zsh*", "*|dash*",  "*| dash*",
+    "*|python*", "*| python*", "*|php*", "*| php*", "*|perl*", "*| perl*", "*|ruby*", "*| ruby*",
+    "*|node*", "*| node*", "*|lua*",  "*| lua*", "*|busybox*", "*| busybox*", "*|*base64 -d*", "*|*base64 --decode*",
+    "*|*base64 --decode*", "*|*openssl base64 -d*", "*xxd *", "*| openssl*enc * -d *", "*b64decode -r*",
+
+    /* Interpreter Execution */
+    "*python -c*", "*python3 -c*", "*php -r*", "*perl -e*", "*ruby -e*", "*lua -e*", "*node -e *",
+
+    /* Reverse Shells */
+    "*netcat *", "* nc *", "*ncat *", "*/dev/tcp*", "*/dev/udp/*", "*socat *", "*openssl*s_client *", "*stty*raw*-echo*",
+    "*mkfifo /tmp/*", 
+
+    /* File Access */
+    "*>*/etc/cron*", "*crontab*", "*/etc/ssh*", "*/home/*/.ssh/*", "*/root/.ssh*", "*~/.ssh/*", "*/etc/shadow*",
+    "*/etc/passwd*", "*/etc/master.passwd*",
+
+    /* Enumeration & Discovery */
+    "*/etc/hosts*", "*/etc/resolv.conf*", "*/etc/hostname*", "*/etc/issue*", "*/etc/os-release*", "*lsb_release*",
+    "*/proc/*/environ*", "*sudo -l*", "*/proc/*/cgroup*", "*dockerenv*", "*/proc/*/mountinfo*", "*printenv*",
+    "*cat*.env *", "*getcap*", "*capsh*", "*find / *", "*netstat *",
+
+    /* AWS Credentials */
+    "*aws_access_key_id*", "*aws_secret_access_key*", "*aws_session_token*", "*accesskeyid*", "*secretaccesskey*",
+    "*.aws/credentials*", "*/.aws/config*",
+
+    /* Azure Credentials */
+    "*AZURE_CLIENT_ID*", "*AZURE_TENANT_ID*", "*AZURE_CLIENT_SECRET*", "*AZURE_FEDERATED_TOKEN_FILE*",
+    "*IDENTITY_ENDPOINT*", "*IDENTITY_HEADER*", "*MSI_ENDPOINT*", "*MSI_SECRET*", "*/.azure/*",
+    "*/run/secrets/azure/*",
+
+    /* GCP Credentials */
+    "*/.config/gcloud/*", "*application_default_credentials.json*", "*type: service_account*",
+    "*client_email*", "*private_key_id*", "*/run/secrets/google/*", "*GOOGLE_APPLICATION_CREDENTIALS*",
+
+    /* Misc. Cloud */
+    "*/.docker/config.json*", "*/.npmrc*", "*/secrets/kubernetes.io/serviceaccount/*",
+
+    /* Helpers */
+    "*timeout *sh -c *", "*env *sh *-c*", "*exec -a*",
+
+    /* Miscellaneous */
+    "*chattr *", "*busybox *",  "*#!*", "*chmod +x *", "*chmod 777*", "*chpasswd*",
+    "*<?php*?>*", "*kworker*",
+    
+    /* Decompression */
+    "*gzip -*d *", "*bzip2 -*d *", "*xz -*d *", "*tar -*x*",
+    
+    /* Path Traversal */
+    "*../../../*etc/*", "*/.../*", "*../../../*home/*/*", "*../../../*root/*",
+
+    /* File Upload/Download */
+    "*pastebin.com*", "*transfer.sh*", "*bashupload.com*"
+  ) or
+  process.args in ("id", "whoami", "hostname")
+) and
+not (
+  process.command_line like (
+    "sh -c node -v || nodejs -v", "*./postinstall*", "*./_postinstall*", "/bin/sh -c lsb_release -sd",
+    "*/etc/freepbx.conf*", "*betterme/image-processing-service-admin-frontend*"
+  ) or
+  process.parent.args like (
+    "/opt/bitdefender/*", "/opt/cursor-agent/*", "/home/*/*", "/root/*", "/var/www/html/ext/.deloreanbuild",
+    "/usr/lib/node_modules/openclaw/dist/index.js", "/opt/yarn*", "*anthropic-ai/claude-code/cli.js*",
+    "/usr/bin/docker-builder", "/opt/jenkins/.nvm/versions/node/*/bin/npm", "/usr/local/renovate/node",
+    "/opt/buildagent/work/*/node_modules/.bin/cypress", "/var/www/html/ext/node_modules/.bin/webpack",
+    "/opt/containerbase/tools/node/*/bin/node", "/opt/*/bin/*/node_modules/.bin/bower"
+  ) or
+  process.args like ("npx *", "node /var/www/html/ext/node_modules/.bin/webpack*", "grep* | awk*") or
+  process.parent.executable like (
+    "/user/*/.vscode-server/cli/servers/*/server/node", "/scratch/*/.vscode-server/cli/servers/*/server/node",
+    "/users/*/.vscode-server/*/node", "/opt/code-server/*/lib/node", "/opt/jenkins/workspace/*/bin/node",
+    "/scratch/user/*/.cursor-server/bin/linux-x64/*/node"
+  ) or
+  process.working_directory == "/runner/_work/personify/personify/node_modules/snyk" or
+  (process.command_line like "*REPO_NAME*" and process.parent.args == "/usr/bin/n8n")
+)
+'''
+
+min_endpoint_version = "8.2.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1190"
+name = "Exploit Public-Facing Application"
+reference = "https://attack.mitre.org/techniques/T1190/"
+
+
+[threat.tactic]
+id = "TA0001"
+name = "Initial Access"
+reference = "https://attack.mitre.org/tactics/TA0001/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.004"
+name = "Unix Shell"
+reference = "https://attack.mitre.org/techniques/T1059/004/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1505"
+name = "Server Software Component"
+reference = "https://attack.mitre.org/techniques/T1505/"
+[[threat.technique.subtechnique]]
+id = "T1505.003"
+name = "Web Shell"
+reference = "https://attack.mitre.org/techniques/T1505/003/"
+
+
+
+[threat.tactic]
+id = "TA0003"
+name = "Persistence"
+reference = "https://attack.mitre.org/tactics/TA0003/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1210"
+name = "Exploitation of Remote Services"
+reference = "https://attack.mitre.org/techniques/T1210/"
+
+
+[threat.tactic]
+id = "TA0008"
+name = "Lateral Movement"
+reference = "https://attack.mitre.org/tactics/TA0008/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1071"
+name = "Application Layer Protocol"
+reference = "https://attack.mitre.org/techniques/T1071/"
+
+
+[threat.tactic]
+id = "TA0011"
+name = "Command and Control"
+reference = "https://attack.mitre.org/tactics/TA0011/"
+
+[internal]
+min_endpoint_version = "8.2.0"

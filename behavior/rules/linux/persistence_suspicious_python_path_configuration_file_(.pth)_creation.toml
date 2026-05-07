@@ -1,0 +1,78 @@
+[rule]
+description = """
+Detects creation or change of a Python path configuration file (.pth) with a suspicious import preface, file size or
+entropy. This rule matches .pth files whose leading bytes correspond to UTF-8 text beginning with an import-style
+preface (for example, the string starting with "import os, subpr" as used before subprocess or similar calls). That
+pattern is atypical and may indicate code execution via the .pth mechanism.
+"""
+id = "983dc90f-7eb0-4832-a537-3854b40d31fa"
+license = "Elastic License v2"
+name = "Suspicious Python Path Configuration File (.pth) Creation"
+os_list = ["linux"]
+reference = [
+    "https://dfir.ch/posts/publish_python_pth_extension/",
+    "https://www.volexity.com/blog/2024/04/12/zero-day-exploitation-of-unauthenticated-remote-code-execution-vulnerability-in-globalprotect-cve-2024-3400/",
+    "https://futuresearch.ai/blog/litellm-pypi-supply-chain-attack/",
+    "https://www.virustotal.com/gui/file/71e35aef03099cd1f2d6446734273025a163597de93912df321ef118bf135238",
+]
+version = "1.0.1"
+
+query = '''
+file where event.type in ("change", "creation") and file.extension like "pth" and (
+  file.Ext.header_bytes like "696d706f7274206f732c207375627072" or
+  (
+    file.path like "*site-packages*" and
+    (file.size >= 30000 or file.Ext.entropy >= 5.5)
+  )
+)
+'''
+
+min_endpoint_version = "9.3.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.006"
+name = "Python"
+reference = "https://attack.mitre.org/techniques/T1059/006/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1546"
+name = "Event Triggered Execution"
+reference = "https://attack.mitre.org/techniques/T1546/"
+
+[[threat.technique]]
+id = "T1574"
+name = "Hijack Execution Flow"
+reference = "https://attack.mitre.org/techniques/T1574/"
+
+
+[threat.tactic]
+id = "TA0003"
+name = "Persistence"
+reference = "https://attack.mitre.org/tactics/TA0003/"
+
+[internal]
+min_endpoint_version = "9.3.0"

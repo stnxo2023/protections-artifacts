@@ -1,0 +1,68 @@
+[rule]
+description = """
+Identifies when a non-interactive terminal (tty) is being upgraded to a fully interactive shell. Attackers may upgrade a
+simple reverse shell to a fully interactive tty after obtaining initial access to a host, in order to obtain a more
+stable connection.
+"""
+id = "f1e932e5-41c5-465f-823b-83fc6f379bb4"
+license = "Elastic License v2"
+name = "Non-interactive Shell Upgrade"
+os_list = ["linux"]
+version = "1.0.1"
+
+query = '''
+process where event.type == "start" and event.action == "exec" and (
+  (
+    process.name == "stty" and
+    process.args == "raw" and
+    process.args == "-echo" and
+    process.args_count >= 3
+  ) or
+  (
+    process.name == "script" and
+    process.args in ("-qc", "-c") and
+    process.args == "/dev/null" and
+    process.args_count == 4
+  )
+) and
+not (
+  process.parent.command_line like ("linode-longview", "*bootstrap*", "*homebrew*", "*/home/*/.claude/shell-snapshots/snapshot*") or
+  process.parent.executable in ("/usr/bin/expect", "/usr/bin/nsh-single-command", "/usr/bin/runc") or
+  process.command_line == "stty -echo raw min 0 time 2" or
+  process.args like ("/dev/tty*", "/dev/serial/*") or
+  process.parent.args == "/usr/share/emacs/site-lisp/emacspeak/servers/dtk-exp"
+)
+'''
+
+min_endpoint_version = "7.15.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.004"
+name = "Unix Shell"
+reference = "https://attack.mitre.org/techniques/T1059/004/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+
+[internal]
+min_endpoint_version = "7.15.0"

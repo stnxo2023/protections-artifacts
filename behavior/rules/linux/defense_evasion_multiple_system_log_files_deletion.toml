@@ -1,0 +1,98 @@
+[rule]
+description = """
+Monitors for the deletion of multiple sensitive Linux system logs. This may indicate an attempt to evade detection or
+destroy forensic evidence on a system.
+"""
+id = "ffab808c-9944-44eb-8a4b-456a5e6c096d"
+license = "Elastic License v2"
+name = "Multiple System Log Files Deletion"
+os_list = ["linux"]
+version = "1.0.1"
+
+query = '''
+sequence by process.parent.entity_id with maxspan=10s
+  [file where event.type == "deletion" and process.executable != null and file.path in (
+    "/var/run/utmp", "/var/log/wtmp", "/var/log/btmp", "/var/log/lastlog", "/var/log/faillog",
+    "/var/log/syslog", "/var/log/messages", "/var/log/secure", "/var/log/auth.log", "/var/log/boot.log",
+    "/var/log/kern.log", "/var/log/dmesg"
+  ) and
+  not process.executable like (
+    "/kaniko/executor", "/var/lib/docker/overlay2/*/merged/kaniko/executor", "/kaniko/kaniko-executor"
+  )] as event0
+  [file where event.type == "deletion" and process.executable != null and
+  not startswith~(file.path, event0.file.path) and file.path in (
+    "/var/run/utmp", "/var/log/wtmp", "/var/log/btmp", "/var/log/lastlog", "/var/log/faillog",
+    "/var/log/syslog", "/var/log/messages", "/var/log/secure", "/var/log/auth.log", "/var/log/boot.log",
+    "/var/log/kern.log", "/var/log/dmesg"
+  ) and
+  not process.executable like (
+    "/kaniko/executor", "/var/lib/docker/overlay2/*/merged/kaniko/executor", "/kaniko/kaniko-executor"
+  )] as event1
+  [file where event.type == "deletion" and process.executable != null and
+  not startswith~(file.path, event1.file.path) and file.path in (
+    "/var/run/utmp", "/var/log/wtmp", "/var/log/btmp", "/var/log/lastlog", "/var/log/faillog",
+    "/var/log/syslog", "/var/log/messages", "/var/log/secure", "/var/log/auth.log", "/var/log/boot.log",
+    "/var/log/kern.log", "/var/log/dmesg"
+  ) and
+  not process.executable like (
+    "/kaniko/executor", "/var/lib/docker/overlay2/*/merged/kaniko/executor", "/kaniko/kaniko-executor"
+  )]
+'''
+
+min_endpoint_version = "8.6.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 1
+
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 2
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 1
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 2
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1070"
+name = "Indicator Removal"
+reference = "https://attack.mitre.org/techniques/T1070/"
+[[threat.technique.subtechnique]]
+id = "T1070.002"
+name = "Clear Linux or Mac System Logs"
+reference = "https://attack.mitre.org/techniques/T1070/002/"
+
+[[threat.technique.subtechnique]]
+id = "T1070.004"
+name = "File Deletion"
+reference = "https://attack.mitre.org/techniques/T1070/004/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "8.6.0"

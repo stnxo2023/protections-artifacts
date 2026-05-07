@@ -1,0 +1,272 @@
+[rule]
+description = """
+This rule detects potential remote code execution attempts via commonly used mail server applications, by monitoring for
+unusual child processes and command line arguments.
+"""
+id = "318e6a4f-fb72-4010-a625-d41bae9e349a"
+license = "Elastic License v2"
+name = "Potential Remote Code Execution via Mail Server"
+os_list = ["linux"]
+version = "1.0.4"
+
+query = '''
+process where event.type == "start" and event.action == "exec" and process.parent.interactive == false and
+(
+  process.parent.name in ("exim4", "postfix", "smtpd", "sendmail", "dovecot", "amavisd-new", "amavisd", "spamd") or
+  (
+    process.parent.name == "master" and
+    process.parent.executable like "/*/postfix*master"
+  )
+) and
+not (
+  (process.parent.name == "exim4" and process.args like "/usr/lib/nagios/plugins/check_file_age*") or
+  (process.parent.name in ("amavisd-new", "amavisd") and process.command_line == "/usr/bin/gzip -d") or
+  (process.parent.name == "dovecot" and process.command_line == "gzip") or
+  (process.parent.name == "amavisd" and process.name == "amavisd")
+) and
+(
+  process.name in (
+    "scp", "gzip", "bzip2", "xz", "tar", "getcap", "capsh", "find", "nohup", "setsid", "timeout", "disown",
+    "mkfifo", "printenv", "env", "chpasswd", "echo"
+  ) or
+  (
+    process.name == "touch" and
+    not process.args like (
+      "/home/*/.esmtp_queue/*/lock", "/root/.esmtp_queue/*/lock", "/prod/prod/data/prodstage/possum/error/"
+    )
+  ) or
+  process.name like ".*" or
+  (
+    process.name in ("whoami", "id", "hostname", "uname", "ps", "netstat", "ss", "ip", "ifconfig") and
+    process.interactive == true and process.parent.interactive == false
+  ) or
+  process.executable like ("/dev/shm/*", "/tmp/*", "/var/tmp/*", "/root/*", "./*") or
+  (
+    process.executable like ("/bin/python*", "/usr/bin/python*", "/usr/local/bin/python*") and (
+      process.args == "-c" or
+      (
+        process.args_count <= 2 and
+        process.args like ("/tmp/*", "/var/tmp/*", "/dev/shm/*", "/var/www/*", "/root/*", "/home/*/*", "./*.py") and
+        process.args like "*.py*"
+      )
+    ) and
+    not process.args in ("--version", "app.py")
+  ) or
+  (
+    process.executable like (
+      "/bin/perl*", "/usr/bin/perl*", "/usr/local/bin/perl*",
+      "/bin/ruby*", "/usr/bin/ruby*", "/usr/local/bin/ruby*",
+      "/bin/lua*", "/usr/bin/lua*", "/usr/local/bin/lua*",
+      "/bin/node", "/usr/bin/node", "/usr/local/bin/node"
+    ) and
+    (process.args like "-e*" or process.args_count <= 2)
+  ) or
+  (
+    process.executable like ("/bin/php*", "/usr/bin/php*", "/usr/local/bin/php*") and
+    (process.args like "-r*" or process.args_count <= 2) and
+    not (
+      process.args like "var_export*" or
+      process.command_line in ("php -r echo get_current_user().PHP_EOL;", "php -r echo date('T');")
+    ) 
+  ) or
+  (
+    process.name in ("netcat", "nc", "ncat", "nc.traditional", "nc.openbsd") and (
+      process.command_line regex ".*[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}.*" or
+      process.command_line like "*http*"
+    ) and
+    not process.args in ("localhost", "127.0.0.1", "-z", "-zv") 
+  ) or
+  (
+    process.name == "socat" and
+    process.command_line like~ ("*exec*", "*tty*", "*fork*", "*file*", "*open*") and
+    process.command_line like~ ("*tcp*", "*udp*", "*openssl*")
+  ) or
+  (
+    process.name == "openssl" and (
+      process.command_line like ("*s_server*", "*s_client*") or
+      (process.args == "enc" and process.args in ("-d", "-base64", "-a", "-A"))
+    )
+  ) or
+  (
+    process.name in ("curl", "wget") and process.args like~ ("-o", "--output*", "-o-") and (
+      process.command_line regex ".*[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}.*" or
+      process.command_line like "*http*"
+    ) and
+    process.command_line like ("* /tmp/*", "* /var/tmp/*", "* /dev/shm/*", "* /var/www/*", "* ~/*", "* /home/*", "* /run/*", "* /var/run/*")
+  ) or
+  (
+    process.name in ("base64", "basez", "base64plain", "base64url", "base64mime", "base64pem", "basenc", "base32", "base16") and
+    process.args like~ "-*d*"
+  ) or
+  (
+    process.name == "xxd" and process.args like~ ("-*r*", "-*p*")
+  ) or
+  (process.name == "sudo" and process.args == "-l") or
+  (
+    process.executable like ("/bin/chmod", "/usr/bin/chmod", "/usr/local/bin/chmod") and
+    process.args like ("+x", "a+x", "0777", "755", "777", "+s", "u+s", "g+s")
+  ) or
+  (
+    process.executable like ("/bin/cat", "/usr/bin/cat", "/usr/local/bin/cat") and
+    process.args like (
+      "/etc/passwd", "/etc/shadow", "/etc/hostname", "/etc/hosts", "*ssh*", "/proc/self/environ",
+      "*.env*", "*../../../*", "*/secrets/kubernetes.io/serviceaccount/*", "*/.docker/config.json*",
+      "*/.npmrc*", "*.aws/credentials*", "*/.aws/config*"
+    )
+  ) or
+  (
+    process.name in ("bash", "dash", "sh", "tcsh", "csh", "zsh", "ksh", "fish", "busybox") and
+    process.args in ("-c", "-cl", "-lc") and (
+      process.command_line like (
+        /* Suspicious Paths */
+        "* /tmp/* ", "* /var/tmp/* ", "* /dev/shm/*", "* /var/www/*", "* /run/*", "* /var/run/*",
+
+        /* Interpreter Execution */
+        "*python* -c*", "*php* -r*", "*perl* -e*", "*ruby* -e*", "*lua* -e*", "*node * -e *",
+
+        /* Encoding, Decoding & Piping */
+        "*|sh", "*| sh *", "*| sh ", "*|bash*", "*| bash*", "*|zsh*",  "*| zsh*", "*|dash*",  "*| dash*",
+        "*|python*", "*| python*", "*|php*", "*| php*", "*|perl*", "*| perl*", "*|ruby*", "*| ruby*",
+        "*|node*", "*| node*", "*|lua*",  "*| lua*", "*|busybox*", "*| busybox*", "*|*base64 -d*", "*|*base64 --decode*",
+        "*|*base64 --decode*", "*|*openssl base64 -d*", "*xxd *", "*| openssl*enc * -d *", "*b64decode -r*",
+
+        /* Reverse Shells */
+        "*netcat *", "* nc *", "*ncat *", "*/dev/tcp*", "*/dev/udp/*", "*socat *", "*openssl*s_client *", "*stty*raw*-echo*",
+
+        /* File Access */
+        "*>*/etc/cron*", "*/etc/ssh*", "*/home/*/.ssh/*", "*/root/.ssh*", "*~/.ssh/*", "*/etc/shadow*", "*/etc/passwd*", "*chpasswd*",
+
+        /* Helpers */
+        "*nohup*", "*setsid *", "*timeout *sh -c *", "*disown*", "*env *sh *-c*",
+
+        /* Miscellaneous */
+        "*chattr *", "*busybox *",  "*#!*", "*chmod +x *", "*chmod 777*", 
+        
+        /* Decompression */
+        "*gzip -*d *", "*bzip2 -*d *", "*xz -*d *", "*tar -*x*",
+         
+         /* Path Traversal */
+         "*../../../*etc/*", "*/.../*", "*../../../*home/*/*", "*../../../*root/*"
+      ) or
+      (
+        process.command_line like ("*wget *", "*curl *") and
+        (
+          process.command_line regex ".*[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}(:[0-9]{1,5})?/.*" or
+          process.command_line like ("*http*", "*ftp*")
+        ) and
+        (
+          (
+            process.command_line regex~ """.*curl.* \-[a-zA-Z]*[oO]( .+|\-.*)?""" or
+            process.command_line like~ ("*curl* --output*", "*curl* --remote-name*")
+          ) or
+          (
+            (
+              process.command_line regex~ """.*wget.* \-[a-zA-Z]*O.*""" or
+              process.command_line like~ "*wget* --output-document*"
+            ) and
+          not process.command_line like """*--output-document "-"*"""
+          ) or
+          process.command_line like ("*|*sh*", "*|*python*", "*|*php*", "*|*perl*", "*|*ruby*", "*|*node*", "*|*lua*", "*|*busybox*") or
+          (
+            process.command_line like ("*curl *>> /*", "*curl *>>/*", "*curl *> /*", "*curl *>/*", "*wget *>> /*", "*wget *>>/*", "*wget *> /*", "*wget *>/*") and
+            not process.command_line like ("*> /dev/null*", "*>/dev/null*", "*curl*/etc/cobra/*/uploads/whatsapp/*")
+          )
+        ) and
+        not process.command_line like ("*-O /dev/null*", "*-o /dev/null*")
+      )
+    )
+  )
+) and
+not (
+  process.executable like ("/tmp/newroot/*", "/opt/lxc/*", "/var/snap/lxd/*") or
+  process.parent.command_line == "runc init" or
+  process.command_line in ("pickup -l -t unix -u", "pickup -l -t unix -u -c") or
+  (
+    process.parent.executable == "/etc/init.d/postfix" and process.command_line == "/bin/echo -n postfix is running"
+  ) or
+  (
+    process.parent.executable == "/usr/libexec/postfix/master" and
+    process.command_line in ("/usr/bin/hostname", "ps -eo pid,args", "uname -m")
+  ) or
+  (
+    process.parent.executable == "/usr/sbin/dovecot" and
+    process.command_line like "*/usr/local/cpanel/3rdparty/wp-toolkit/plib/vendor/wp-cli/wpt-wp-cli.php*"
+  )
+)
+'''
+
+min_endpoint_version = "8.3.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1190"
+name = "Exploit Public-Facing Application"
+reference = "https://attack.mitre.org/techniques/T1190/"
+
+
+[threat.tactic]
+id = "TA0001"
+name = "Initial Access"
+reference = "https://attack.mitre.org/tactics/TA0001/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.004"
+name = "Unix Shell"
+reference = "https://attack.mitre.org/techniques/T1059/004/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1554"
+name = "Compromise Host Software Binary"
+reference = "https://attack.mitre.org/techniques/T1554/"
+
+
+[threat.tactic]
+id = "TA0003"
+name = "Persistence"
+reference = "https://attack.mitre.org/tactics/TA0003/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1210"
+name = "Exploitation of Remote Services"
+reference = "https://attack.mitre.org/techniques/T1210/"
+
+
+[threat.tactic]
+id = "TA0008"
+name = "Lateral Movement"
+reference = "https://attack.mitre.org/tactics/TA0008/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1071"
+name = "Application Layer Protocol"
+reference = "https://attack.mitre.org/techniques/T1071/"
+
+
+[threat.tactic]
+id = "TA0011"
+name = "Command and Control"
+reference = "https://attack.mitre.org/tactics/TA0011/"
+
+[internal]
+min_endpoint_version = "8.3.0"

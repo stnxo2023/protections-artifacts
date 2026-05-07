@@ -1,0 +1,54 @@
+[rule]
+description = """
+Adversaries may attempt to disable Security-Enhanced Linux (SELinux), which is a Linux kernel security feature to
+support access control policies. Disabling SELinux can allow malicious activities to continue undetected.
+"""
+id = "54aabfc3-7a78-4241-b0b2-e0de46d8e7b7"
+license = "Elastic License v2"
+name = "Attempt to Disable SELinux"
+os_list = ["linux"]
+version = "1.0.1"
+
+query = '''
+process where event.type == "start" and event.action == "exec" and
+process.name == "setenforce" and process.args == "0" and
+not (
+  process.parent.args like (
+    "/tmp/ansible-tmp-*/AnsiballZ_command.py", "/tmp/chef-script*", "/root/fapolicyd_rebuild.sh"
+  ) or
+  process.parent.executable in (
+    "/opt/Tanium/TaniumClient/Tools/TCMClientUpgrade/ClientManagementUpgrade-upgrade.sh", "/usr/libexec/platform-python",
+    "/usr/share/centrifydc/libexec/dzdo"
+  ) or
+  (process.parent.name in ("taskrun", "perl") and process.parent.args == "/usr/local/cpanel/bin/taskrun") or
+  process.parent.executable like "/usr/libexec/platform-python*"
+)
+'''
+
+min_endpoint_version = "7.15.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1562"
+name = "Impair Defenses"
+reference = "https://attack.mitre.org/techniques/T1562/"
+[[threat.technique.subtechnique]]
+id = "T1562.001"
+name = "Disable or Modify Tools"
+reference = "https://attack.mitre.org/techniques/T1562/001/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "7.15.0"

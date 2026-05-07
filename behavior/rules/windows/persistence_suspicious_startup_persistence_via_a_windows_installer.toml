@@ -7,7 +7,7 @@ id = "9f7aece1-355c-4e72-a7ea-767d5cccb12d"
 license = "Elastic License v2"
 name = "Suspicious Startup Persistence via a Windows Installer"
 os_list = ["windows"]
-version = "1.0.4"
+version = "1.0.5"
 
 query = '''
 any where process.name : "msiexec.exe" and
@@ -20,7 +20,10 @@ any where process.name : "msiexec.exe" and
     registry.data.strings : ("*C:\\Users*\\*\\Contacts\\*", "*cmd*/c*", "*powershell*", "*node.exe*.js*", "*rundll32*",
                              "*mshta.exe*", "*wscript.exe*", "*cscript.exe*", "*C:\\Users\\Public\\*") and
     not registry.data.strings :
-                  ("rundll32.exe \"C:\\Program Files\\VMware\\VMware View\\Agent\\bin\\MessageFrameWork.dll\",EnvSyncW",
+                  ("rundll32.exe \"?:\\Program Files\\VMware\\VMware View\\Agent\\bin\\MessageFrameWork.dll\",EnvSyncW",
+                   "rundll32.exe ?:\\PROGRA~1\\Omnissa\\Horizon\\Agent\\bin\\MESSAG~1.DLL,EnvSyncW",
+                   "rundll32.exe \"?:\\Program Files\\Omnissa\\Horizon\\Agent\\bin\\MessageFrameWork.dll\",EnvSyncW",
+                   "rundll32.exe DR*Svc.dll,EntryPointUserMessage",
                    "rundll32.exe DR*SVC.dll, EntryPointUserMessage",
                    "rundll32.exe P*Svc.dll, EntryPointUserMessage",
                    "rundll32.exe DRV*.dll,EntryPointUserMessage",

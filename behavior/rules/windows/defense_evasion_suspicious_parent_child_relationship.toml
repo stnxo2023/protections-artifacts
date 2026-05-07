@@ -12,7 +12,7 @@ reference = [
     "https://www.elastic.co/security-labs/elastic-security-labs-discovers-lobshot-malware",
     "https://www.elastic.co/security-labs/elastic-security-labs-steps-through-the-r77-rootkit",
 ]
-version = "1.0.43"
+version = "1.0.44"
 
 query = '''
 process where event.action == "start" and
@@ -89,7 +89,11 @@ process where event.action == "start" and
         process.parent.executable : ("?:\\Program Files (x86)\\Workplace\\Components\\WorkplaceContainerComponent\\Current\\Workplace Starter.exe",
                                      "?:\\Program Files (x86)\\Workplace\\Components\\WorkplaceContainerComponent\\Current\\Workplace Container Helper.exe")) and
    not (process.executable : "C:\\Windows\\Sys?????\\wbem\\WmiPrvSE.exe" and process.args : "/RegServer" and process.parent.name : ("powershell.exe", "cmd.exe")) and 
-   not (process.parent.name == "lsass.exe" and process.args : "C:\\Program` Files\\PasswordRBL\\passwdfw.ps1")
+   not (process.parent.name == "lsass.exe" and process.args : "C:\\Program Files\\PasswordRBL\\passwdfw.ps1") and
+   not (process.name : "services.exe" and process.parent.executable : "?:\\Windows\\LFSAgent\\lasrv.exe" and
+        process.code_signature.trusted == true and
+        process.code_signature.subject_name : "LEPIDE SOFTWARE PRIVATE LIMITED") and
+   not (process.name : "LogonUI.exe" and process.parent.executable : "?:\\Users\\*\\AppData\\Local\\Microsoft\\OneDrive\\*\\FileCoAuth.exe")
 '''
 
 min_endpoint_version = "7.15.0"

@@ -9,7 +9,7 @@ id = "a13c8f01-36a5-4ad7-a282-8d297cf62860"
 license = "Elastic License v2"
 name = "Suspicious Echo Execution"
 os_list = ["linux"]
-version = "1.0.30"
+version = "1.0.31"
 
 query = '''
 process where event.type == "start" and event.action == "exec" and
@@ -77,7 +77,15 @@ not (
     "/home/*/*/codex/codex", "/home/*/.cache/JetBrains/*/codex-x86_64-unknown-linux-musl", "/home/*/.cursor-server/extensions/*/codex",
     "/scratch/user/*/.vscode-server/extensions/openai.chatgpt-*-linux-x64/bin/linux-x86_64/codex", "/home/*/.aimee-code/bin/claude",
     "/root/.opencode/bin/opencode", "/scratch/user/*/.nvm/versions/node/*/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
-    "/user/*/.vscode-server/extensions/openai.chatgpt-*/bin/linux-x86_64/codex", "/usr/local/bin/teleport", "/usr/bin/coreutils"
+    "/user/*/.vscode-server/extensions/openai.chatgpt-*/bin/linux-x86_64/codex", "/usr/local/bin/teleport", "/usr/bin/coreutils",
+    "/mnt/fast/nobackup/users/*/.local/share/code-server/extensions/*-linux-x64/resources/native-binary/claude",
+    "/home/linuxbrew/.linuxbrew/Caskroom/codex/*/codex-x86_64-unknown-linux-musl", "/usr/local/lib/claude-code/claude-bin",
+    "/home/*/.vscode/extensions/openai.chatgpt-*-linux-x64/bin/linux-x86_64/codex", "/home/*/.chipagents/chipagents/*/bin/chipagents-linux-x64",
+    "/home/*/.windsurf-server/extensions/anthropic.claude-code-*-linux-x64/resources/native-binary/claude",
+    "/home/*/.local/share/fnm/node-versions/*/installation/lib/node_modules/opencode-ai/bin/.opencode",
+    "/var/lib/docker/overlay2/*/merged/app/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude",
+    "/usr/local/share/npm-global/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe", "/home/*/.opencode/bin/opencode",
+    "/mnt/*/user/home/*/.local/share/claude/versions/*"
   ) or
   process.parent.command_line in (
     "runc init", "buildkit-runc init", "/usr/local/bin/runc init", "python ./ssh.py --update-fingerprints bi_team",
@@ -116,14 +124,17 @@ not (
     "/nix/store/*", "/usr/bin/swatchdog*", "/usr/local/hostguard/data/benchmark/module/SSH/playbook.py",
     "/tmp/kubectl*.yaml", "./mmicro-control.pl", "/usr/local/bin/vncserver", "buildah-chroot-exec", "/usr/libexec/crio/crun",
     "/usr/bin/crun", "/usr/bin/vncserver", "/tmp/ansible_*/ansible_module_command.py", "/opt/calculus/farmer/app/farmer.py",
-    "openclaw-gateway", "lxc-attach", "/home/*/.npm-global/lib/node_modules/openclaw/dist/index.js", "/home/*/openclaw/openclaw.mjs"
+    "openclaw-gateway", "lxc-attach", "/home/*/.npm-global/lib/node_modules/openclaw/dist/index.js", "/home/*/openclaw/openclaw.mjs",
+    "/bin/segfaultsh"
   ) or
   process.working_directory like ("/var/local/InterMapper_Settings/Tools", "/usr/local/gateway-*", "/repo/o11y/out/*/.terraform/*") or
   (process.working_directory == "/etc/prometheus" and process.parent.command_line == "tmux -Lwarp -CC") or
   (process.parent.name == "node" and process.command_line like~ ("*/tmp/claude*", "/usr/bin/bash -O extglob -c*")) or
   (process.parent.name == "php" and process.command_line like "sh -c timeout 7200 ssh*") or
   (process.parent.name == "node" and process.args == "extglob") or
-  (process.parent.name like "python*" and process.args like ("declare -A categories*", "files=*", "set -x*$BACKUP_NAME.tar.gz*", "*while_finding_grubconfigs*"))
+  (process.parent.name like "python*" and process.args like ("declare -A categories*", "files=*", "set -x*$BACKUP_NAME.tar.gz*", "*while_finding_grubconfigs*")) or
+  (process.parent.executable == "/usr/local/bin/php" and process.args like "timeout*/var/www/html/storage/app/ssh/mux/mux*") or
+  (process.parent.executable == "/usr/bin/perl" and process.command_line like "*/tmp/recover_SAP/settings*")
 )
 '''
 

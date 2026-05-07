@@ -12,7 +12,7 @@ reference = [
     "https://www.elastic.co/security-labs/invisible-miners-unveiling-ghostengine",
     "https://www.elastic.co/security-labs/siestagraph-new-implant-uncovered-in-asean-member-foreign-ministry",
 ]
-version = "1.0.54"
+version = "1.0.55"
 
 query = '''
 process where event.action == "start" and
@@ -129,7 +129,7 @@ process where event.action == "start" and
   not (process.name : "services.exe" and process.args : "-i*" and process.parent.name : "monitor.exe") and
   not (process.name : "RegAsm.exe" and process.args : ("directdeposit.vb.tlb", "?:\\Program Files (x86)\\*.dll", "?:\\Program Files\\*.dll")) and
   not process.executable : "D:\\Reform V*\\Reform_PDC_Server_v*\\Plugins\\Monitoring\\CScript.exe" and
-  not (process.name : "rundll32.exe" and process.code_signature.subject_name in ("Teramind Inc.", "STAKHANOVETS LIMITED LIABILITY COMPANY") and process.code_signature.trusted == true) and
+  not (process.name : "rundll32.exe" and process.code_signature.subject_name : ("Teramind Inc.", "STAKHANOVETS LIMITED LIABILITY COMPANY") and process.code_signature.trusted == true) and
   not (process.name : "regsvr32.exe" and
        process.args : ("?:\\Sage\\Sage300 Programs\\GL69A\\FRCOM690.DLL",
                        "?:\\Program Files (x86)\\*.dll",
@@ -162,6 +162,10 @@ process where event.action == "start" and
   not (process.executable : "C:\\ProgramData\\baramundi\\bma\\Downloads\\Temp\\netsh.exe" and
        process.args : "exec" and process.args : "\\\\*.txt") and
   not (process.name : "bcdedit.exe" and process.args : "/enum") and
+  not (process.executable : "?:\\Windows\\LFSAgent\\services.exe" and
+       process.code_signature.trusted == true and
+       process.code_signature.subject_name : "LEPIDE SOFTWARE PRIVATE LIMITED") and
+  not (process.name : "ping.exe" and process.executable : "?:\\Windows\\Temp\\pdk-SYSTEM-*\\ping.exe") and
   not (process.code_signature.subject_name : ("JetBrains s.r.o.", "LG Electronics Inc.", "Timothy Hugh Perry", "Code Systems Corporation", "Douyin Vision Co., Ltd.", "Hangzhou Hikvision Digital Tech.Co.,Ltd") and process.code_signature.trusted == true) and
   not process.hash.sha256 :
                   ("7c621ec91b71d14494beddaae8edb67ed26baa257d750546772aa90653ad6016",

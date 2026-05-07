@@ -1,0 +1,68 @@
+[rule]
+description = """
+Detects when the tc (traffic control) binary is utilized to set a BPF (Berkeley Packet Filter) on a network interface.
+Tc is used to configure Traffic Control in the Linux kernel. It can shape, schedule, police and drop traffic. A threat
+actor can utilize tc to set a bpf filter on an interface for the purpose of manipulating the incoming traffic. This
+technique is not at all common and should indicate abnormal, suspicious or malicious activity.
+"""
+id = "bde36476-0c2c-40df-b3b1-941b0b31e444"
+license = "Elastic License v2"
+name = "BPF Filter Applied using Traffic Control"
+os_list = ["linux"]
+version = "1.0.1"
+
+query = '''
+process where event.type == "start" and event.action == "exec" and process.name == "tc" and
+process.args == "filter" and process.args == "add" and process.args == "bpf" and
+not process.parent.executable == "/usr/sbin/libvirtd"
+'''
+
+min_endpoint_version = "7.15.0"
+optional_actions = []
+[[actions]]
+action = "kill_process"
+field = "process.entity_id"
+state = 0
+
+[[actions]]
+action = "kill_process"
+field = "process.parent.entity_id"
+state = 0
+
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1059"
+name = "Command and Scripting Interpreter"
+reference = "https://attack.mitre.org/techniques/T1059/"
+[[threat.technique.subtechnique]]
+id = "T1059.004"
+name = "Unix Shell"
+reference = "https://attack.mitre.org/techniques/T1059/004/"
+
+
+
+[threat.tactic]
+id = "TA0002"
+name = "Execution"
+reference = "https://attack.mitre.org/tactics/TA0002/"
+[[threat]]
+framework = "MITRE ATT&CK"
+[[threat.technique]]
+id = "T1562"
+name = "Impair Defenses"
+reference = "https://attack.mitre.org/techniques/T1562/"
+[[threat.technique.subtechnique]]
+id = "T1562.001"
+name = "Disable or Modify Tools"
+reference = "https://attack.mitre.org/techniques/T1562/001/"
+
+
+
+[threat.tactic]
+id = "TA0005"
+name = "Defense Evasion"
+reference = "https://attack.mitre.org/tactics/TA0005/"
+
+[internal]
+min_endpoint_version = "7.15.0"
